@@ -127,7 +127,7 @@ def call_gemini(api_key: str, context: str, chat_history: list, user_message: st
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash", # => chuyển sang model 3.6
         contents=contents,
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.3),
     )
