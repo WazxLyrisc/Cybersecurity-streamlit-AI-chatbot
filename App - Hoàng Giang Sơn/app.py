@@ -23,7 +23,7 @@ from nids_pipeline_v2 import (
     risk_badge,
 )
 
-BUNDLE_PATH = "nids_bundle_v2.joblib"
+BUNDLE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nids_bundle_v2.joblib")
 
 st.set_page_config(page_title="Mini SOC Dashboard", layout="wide")
 
@@ -127,7 +127,7 @@ def call_gemini(api_key: str, context: str, chat_history: list, user_message: st
     )
 
     response = client.models.generate_content(
-        model="gemini-3.6-flash", # => chuyển sang model 3.6
+        model="gemini-2.5-flash",
         contents=contents,
         config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.3),
     )
