@@ -29,10 +29,63 @@ def get_bundle(path: str, modified_ns: int):
     return load_bundle(path)
 
 
+def make_demo_flows(required_features: list[str]) -> pd.DataFrame:
+    """Create clearly labeled illustrative flow records for a one-click demo.
+
+    These are synthetic examples for trying the interface, not measured traffic
+    and not a substitute for representative, labeled evaluation data.
+    """
+    profiles = [
+        {
+            "proto": "tcp",
+            "service": "ssh",
+            "state": "CON",
+            "dur": 1.2,
+            "spkts": 8,
+            "dpkts": 7,
+            "sbytes": 640,
+            "dbytes": 980,
+            "rate": 12.5,
+            "sload": 4266.7,
+            "dload": 6533.3,
+            "sinpkt": 0.15,
+            "dinpkt": 0.17,
+            "swin": 255,
+            "dwin": 255,
+            "smean": 80,
+            "dmean": 140,
+            "ct_src_dport_ltm": 1,
+            "ct_dst_sport_ltm": 1,
+        },
+        {
+            "proto": "udp",
+            "service": "-",
+            "state": "INT",
+            "dur": 0.01,
+            "spkts": 1,
+            "dpkts": 0,
+            "sbytes": 46,
+            "dbytes": 0,
+            "rate": 100.0,
+            "sload": 36800.0,
+            "dload": 0.0,
+            "sinpkt": 0.01,
+            "dinpkt": 0.0,
+            "ct_src_dport_ltm": 10,
+            "ct_dst_sport_ltm": 1,
+        },
+    ]
+    return pd.DataFrame(
+        [{feature: profile.get(feature, 0) for feature in required_features}
+         for profile in profiles],
+        columns=required_features,
+    )
+
+
 st.title("🛡️ Network Intrusion Detection")
 st.caption(
     "Prototype nghiên cứu dùng pipeline UNSW-NB15 hai stage: "
-    "Normal/Attack → loại tấn công."
+    "Normal/Attack → loại tấn công. Có thể chạy thử mà chưa cần chuẩn bị CSV."
 )
 
 if not BUNDLE_PATH.is_file():
@@ -65,28 +118,66 @@ with st.sidebar:
         "và chưa được hiệu chuẩn."
     )
 
-st.subheader("Tải dữ liệu flow")
-st.write(
-    "Tải CSV có đủ 29 feature đầu vào. Engine cũng nhận được CSV 34 cột gốc "
-    "và tự bỏ qua 5 feature đã loại khi train."
+with st.expander("Mô hình này phân tích gì?", expanded=False):
+    st.write(
+        "29 đặc trưng là các thông tin mô tả một network flow, không phải 29 "
+        "loại tấn công. Ví dụ: giao thức và dịch vụ, trạng thái kết nối, thời "
+        "lượng, số gói tin/byte gửi và nhận, tốc độ, tải mạng, độ trễ và số "
+        "kết nối gần đây. Mô hình dùng chúng để dự đoán flow là Normal hay "
+        "Attack; nếu là Attack thì dự đoán thêm nhóm tấn công."
+    )
+    st.info(
+        "App hiện chưa quét URL hay theo dõi mạng trực tiếp. CSV cần chứa các "
+        "flow đã được chuyển thành feature theo định dạng UNSW-NB15."
+    )
+
+mode = st.radio(
+    "Bạn muốn bắt đầu thế nào?",
+    ["Chạy thử demo", "Phân tích CSV của tôi"],
+    horizontal=True,
 )
-uploaded_file = st.file_uploader("Chọn file CSV", type=["csv"])
 
-if uploaded_file is None:
-    st.info("Chọn một CSV để xem trước dữ liệu và chạy dự đoán.")
-    st.stop()
+if mode == "Chạy thử demo":
+    st.subheader("Chạy thử bằng dữ liệu mô phỏng")
+    input_df = make_demo_flows(required_features)
+    st.caption(
+        "Hai flow bên dưới được tạo để minh họa thao tác của app; đây không "
+        "phải traffic thật và kết quả không dùng để đánh giá mô hình."
+    )
+    with st.expander("Xem 2 flow demo", expanded=True):
+        st.dataframe(input_df, use_container_width=True, hide_index=True)
+    st.download_button(
+        "Tải CSV demo",
+        data=input_df.to_csv(index=False).encode("utf-8-sig"),
+        file_name="ids_demo_flows.csv",
+        mime="text/csv",
+    )
+    source_key = "demo-v1"
+else:
+    st.subheader("Phân tích dữ liệu flow của bạn")
+    st.write(
+        "Tải CSV có đủ 29 feature đầu vào. CSV 34 cột gốc của UNSW-NB15 "
+        "cũng được chấp nhận; 5 feature đã loại sẽ được bỏ qua."
+    )
+    uploaded_file = st.file_uploader("Chọn file CSV", type=["csv"])
+    if uploaded_file is None:
+        st.info(
+            "Chưa có CSV? Chọn **Chạy thử demo** để xem app hoạt động, hoặc "
+            "chuẩn bị một CSV flow theo định dạng UNSW-NB15."
+        )
+        st.stop()
 
-raw_bytes = uploaded_file.getvalue()
-upload_key = hashlib.sha256(raw_bytes).hexdigest()
-if st.session_state.get("upload_key") != upload_key:
-    st.session_state["upload_key"] = upload_key
+    raw_bytes = uploaded_file.getvalue()
+    source_key = "csv-" + hashlib.sha256(raw_bytes).hexdigest()
+    try:
+        input_df = pd.read_csv(io.BytesIO(raw_bytes))
+    except (UnicodeDecodeError, pd.errors.ParserError) as exc:
+        st.error(f"Không đọc được CSV: {exc}")
+        st.stop()
+
+if st.session_state.get("source_key") != source_key:
+    st.session_state["source_key"] = source_key
     st.session_state.pop("prediction_result", None)
-
-try:
-    input_df = pd.read_csv(io.BytesIO(raw_bytes))
-except (UnicodeDecodeError, pd.errors.ParserError) as exc:
-    st.error(f"Không đọc được CSV: {exc}")
-    st.stop()
 
 if input_df.empty:
     st.warning("CSV không có dòng dữ liệu.")
@@ -99,10 +190,12 @@ if missing_features:
     st.stop()
 
 st.caption(f"{len(input_df):,} dòng · {len(input_df.columns)} cột trong file")
-with st.expander("Xem trước dữ liệu", expanded=False):
-    st.dataframe(input_df.head(20), use_container_width=True)
+if mode != "Chạy thử demo":
+    with st.expander("Xem trước dữ liệu", expanded=False):
+        st.dataframe(input_df.head(20), use_container_width=True)
 
-if st.button("Phân tích dữ liệu", type="primary", use_container_width=True):
+button_label = "Chạy dự đoán demo" if mode == "Chạy thử demo" else "Phân tích CSV"
+if st.button(button_label, type="primary", use_container_width=True):
     work_df = input_df.copy()
     numeric = work_df.loc[:, numeric_features].apply(pd.to_numeric, errors="coerce")
     invalid_numeric = numeric.isna()
@@ -132,13 +225,13 @@ if st.button("Phân tích dữ liệu", type="primary", use_container_width=True
         results = input_df.copy()
         for column in predictions.columns:
             results[column] = predictions[column].to_numpy()
-        st.session_state["prediction_result"] = results
+    st.session_state["prediction_result"] = results
     except Exception as exc:
         st.error("Không thể dự đoán từ CSV này.")
         st.exception(exc)
 
 results = st.session_state.get("prediction_result")
-if results is not None and st.session_state.get("upload_key") == upload_key:
+if results is not None and st.session_state.get("source_key") == source_key:
     st.subheader("Kết quả")
     counts = results["prediction"].value_counts()
     normal_count = int(counts.get("Normal", 0))
