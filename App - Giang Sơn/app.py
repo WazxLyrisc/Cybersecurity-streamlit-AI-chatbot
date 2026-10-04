@@ -13,7 +13,7 @@ from ids_prediction_engine import load_bundle, predict_ids
 
 
 APP_DIR = Path(__file__).resolve().parent
-BUNDLE_PATH = APP_DIR / "unsw_nb15_ids_29feature_bundle.joblib"
+BUNDLE_PATH = APP_DIR / "./App - Giang Sơn/unsw_nb15_ids_29feature_bundle.joblib"
 
 
 st.set_page_config(
