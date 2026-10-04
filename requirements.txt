@@ -4,3 +4,4 @@ numpy==2.0.2
 pandas
 streamlit==1.65.0
 scipy==1.16.3
+google-genai

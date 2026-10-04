@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,79 @@ from ids_prediction_engine import load_bundle, predict_ids
 
 APP_DIR = Path(__file__).resolve().parent
 BUNDLE_PATH = APP_DIR / "unsw_nb15_ids_29feature_bundle.joblib"
+
+# Các nhóm tấn công có độ chính xác thấp trong đánh giá nội bộ (precision/recall/F1
+# đều dưới ~0.3 trên tập test), nên chatbot cần nhắc thêm mức độ không chắc chắn khi
+# gặp các nhãn này.
+LOW_RELIABILITY_CLASSES = {"Analysis", "Backdoor", "DoS"}
+
+CHATBOT_SYSTEM_PROMPT = """Ban la chuyen gia phan tich an ninh mang (SOC Analyst) ho tro
+quan tri vien dang xem ket qua tu he thong IDS hai tang (Binary Normal/Attack, sau do
+Multiclass phan loai nhom tan cong) huan luyen tren bo du lieu nghien cuu UNSW-NB15.
+
+QUY TAC BAT BUOC:
+- CHI duoc phan tich dua tren 29 dac trung va ket qua mo hinh duoc cung cap trong
+  NGU CANH ben duoi. KHONG bia them so lieu, KHONG suy doan ngoai nhung gi da cho.
+- Day la "diem mo hinh" (model score) CHUA duoc hieu chuan (uncalibrated), khong phai
+  xac suat dam bao dung. Luon nhac dieu nay khi nguoi dung hoi ve "do chac chan".
+- Neu nhan "Nhom co do tin cay thap trong danh gia noi bo" xuat hien trong ngu canh,
+  PHAI nhac ro rang ket qua nay can duoc con nguoi xac minh ky hon, vi nhom tan cong
+  nay thuong bi mo hinh nham lan voi cac nhom khac trong qua trinh danh gia.
+- Vai tro cua ban la GIAI THICH tai sao luong du lieu nay bi gan nhan nhu vay (dua
+  tren cac dac trung bat thuong) va TU VAN cac buoc kiem tra/xu ly tiep theo ở muc
+  do SOC (vi du: doi chieu log goc, kiem tra IP nguon, co nen tam thoi gioi han toc
+  do hay cach ly khong). Ban KHONG phai nguoi ra quyet dinh cuoi cung.
+- Tra loi bang tieng Viet, ngan gon, ro rang, dung gach dau dong khi liet ke."""
+
+
+def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
+    lines = ["=== 29 dac trung cua luong du lieu duoc chon ==="]
+    for feature in required_features:
+        lines.append(f"- {feature}: {row[feature]}")
+
+    lines.append("\n=== Ket qua tu he thong IDS 2 tang ===")
+    lines.append(f"- Nhan tong quat (Stage 1): {row['prediction']}")
+    lines.append(f"- Diem mo hinh ve kha nang la Attack: {row['attack_probability']:.1%}")
+    lines.append(f"- Do tin cay vao nhan du doan (Stage 1): {row['binary_confidence']:.1%}")
+
+    if row["prediction"] == "Attack":
+        attack_type = row["attack_type"]
+        lines.append(f"- Nhom tan cong du doan (Stage 2): {attack_type}")
+        if pd.notna(row.get("attack_confidence")):
+            lines.append(f"- Do tin cay vao nhom tan cong (Stage 2): {row['attack_confidence']:.1%}")
+        if attack_type in LOW_RELIABILITY_CLASSES:
+            lines.append(
+                "- CANH BAO NOI BO: day la nhom co do tin cay thap trong danh gia noi bo "
+                "(precision/recall deu thap, de bi nham lan voi cac nhom khac nhu DoS/"
+                "Backdoor/Exploits). Hay nhac nguoi dung xac minh them."
+            )
+
+    return "\n".join(lines)
+
+
+def call_gemini(api_key: str, context: str, chat_history: list, user_message: str) -> str:
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+
+    contents = [
+        types.Content(role=turn["role"], parts=[types.Part.from_text(text=turn["text"])])
+        for turn in chat_history
+    ]
+    contents.append(
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=f"NGU CANH HIEN TAI:\n{context}\n\nCAU HOI: {user_message}")],
+        )
+    )
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=contents,
+        config=types.GenerateContentConfig(system_instruction=CHATBOT_SYSTEM_PROMPT, temperature=0.3),
+    )
+    return response.text
 
 
 st.set_page_config(
@@ -109,6 +183,14 @@ numeric_features = metadata["binary_numeric_features"]
 categorical_features = metadata["categorical_features"]
 
 with st.sidebar:
+    st.header("Trợ lý AI")
+    gemini_api_key = st.text_input(
+        "Gemini API key",
+        value=os.environ.get("GEMINI_API_KEY", ""),
+        type="password",
+        help="Lấy tại https://aistudio.google.com/apikey. Có thể đặt sẵn biến môi "
+        "trường GEMINI_API_KEY thay vì nhập mỗi lần.",
+    )
     with st.expander("Thông tin kỹ thuật", expanded=False):
         st.write("Dữ liệu huấn luyện: UNSW-NB15")
         st.write("Mô hình dùng 29 đặc trưng của mỗi network flow.")
@@ -305,4 +387,64 @@ if results is not None and st.session_state.get("source_key") == source_key:
         "Kết quả này là gợi ý từ mô hình nghiên cứu, có thể sai hoặc bỏ sót. "
         "Hãy nhờ người có chuyên môn kiểm tra trước khi đưa ra quyết định. "
         "Các nhóm tấn công hiếm có thể khó nhận diện hơn."
+    )
+
+    # ======================================================================
+    # Trợ lý AI: giải thích và tư vấn cho một dòng kết quả cụ thể
+    # ======================================================================
+    st.divider()
+    st.subheader("💬 Hỏi trợ lý AI về một kết nối cụ thể")
+
+    def _row_label(pos: int) -> str:
+        row = results.iloc[pos]
+        tag = "Cần kiểm tra" if row["prediction"] == "Attack" else "Chưa bị đánh dấu"
+        extra = f" · {row['attack_type']}" if pd.notna(row.get("attack_type")) else ""
+        return f"Dòng {pos + 1} — {tag}{extra}"
+
+    # Mặc định chọn sẵn dòng "Cần kiểm tra" đầu tiên (nếu có) để người dùng không
+    # phải tự tìm trong bảng lớn.
+    attack_rows = results.index[results["prediction"] == "Attack"].tolist()
+    default_pos = results.index.get_loc(attack_rows[0]) if attack_rows else 0
+
+    selected_pos = st.selectbox(
+        "Chọn dòng muốn thảo luận",
+        options=list(range(len(results))),
+        index=default_pos,
+        format_func=_row_label,
+        key="chat_row_selector",
+    )
+
+    if st.session_state.get("chat_selected_pos") != selected_pos or \
+            st.session_state.get("chat_source_key") != source_key:
+        st.session_state["chat_selected_pos"] = selected_pos
+        st.session_state["chat_source_key"] = source_key
+        st.session_state["chat_history"] = []
+
+    for turn in st.session_state.get("chat_history", []):
+        with st.chat_message("user" if turn["role"] == "user" else "assistant"):
+            st.markdown(turn["text"])
+
+    user_msg = st.chat_input("Ví dụ: Vì sao dòng này bị đánh dấu? Nên xử lý thế nào?")
+    if user_msg:
+        if not gemini_api_key:
+            st.error("Vui lòng nhập Gemini API key ở thanh bên trái.")
+        else:
+            with st.chat_message("user"):
+                st.markdown(user_msg)
+            context = build_chat_context(results.iloc[selected_pos], required_features)
+            with st.chat_message("assistant"):
+                with st.spinner("Đang phân tích..."):
+                    try:
+                        reply = call_gemini(
+                            gemini_api_key, context, st.session_state["chat_history"], user_msg
+                        )
+                    except Exception as exc:
+                        reply = f"Lỗi khi gọi Gemini API: {exc}"
+                st.markdown(reply)
+            st.session_state["chat_history"].append({"role": "user", "text": user_msg})
+            st.session_state["chat_history"].append({"role": "model", "text": reply})
+
+    st.caption(
+        "Trợ lý AI chỉ diễn giải dựa trên 29 đặc trưng và kết quả mô hình của dòng "
+        "đang chọn — không tự tra cứu thêm dữ liệu nào khác."
     )
