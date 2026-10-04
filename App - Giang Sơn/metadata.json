@@ -1,6 +1,6 @@
 {
   "bundle_format": "unsw_nb15_ids_29feature_v1",
-  "dataset": "UNSW-NB15",
+  "dataset": "UNSW_NB15",
   "raw_dataset_features": [
     "dur",
     "proto",
