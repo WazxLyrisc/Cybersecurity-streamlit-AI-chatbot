@@ -82,10 +82,10 @@ def make_demo_flows(required_features: list[str]) -> pd.DataFrame:
     )
 
 
-st.title("🛡️ Network Intrusion Detection")
+st.title("🛡️ Kiểm tra dữ liệu kết nối mạng")
 st.caption(
-    "Prototype nghiên cứu dùng pipeline UNSW-NB15 hai stage: "
-    "Normal/Attack → loại tấn công. Có thể chạy thử mà chưa cần chuẩn bị CSV."
+    "Bản minh họa nghiên cứu: thử ví dụ có sẵn hoặc phân tích tệp dữ liệu mạng. "
+    "Chưa có tệp? Hãy bắt đầu bằng bản dùng thử."
 )
 
 if not BUNDLE_PATH.is_file():
@@ -109,61 +109,71 @@ numeric_features = metadata["binary_numeric_features"]
 categorical_features = metadata["categorical_features"]
 
 with st.sidebar:
-    st.subheader("Model")
-    st.write("UNSW-NB15 · 29 retained features")
-    st.write("Stage 1: Normal / Attack")
-    st.write("Stage 2: Attack category")
-    st.caption(
-        "Đây là prototype nghiên cứu. Confidence là điểm xác suất từ model "
-        "và chưa được hiệu chuẩn."
-    )
+    with st.expander("Thông tin kỹ thuật", expanded=False):
+        st.write("Dữ liệu huấn luyện: UNSW-NB15")
+        st.write("Mô hình dùng 29 đặc trưng của mỗi network flow.")
+        st.caption(
+            "Đây là prototype nghiên cứu. Điểm mô hình chưa được hiệu chuẩn "
+            "và không phải xác suất bảo đảm."
+        )
 
 with st.expander("Mô hình này phân tích gì?", expanded=False):
     st.write(
-        "29 đặc trưng là các thông tin mô tả một network flow, không phải 29 "
-        "loại tấn công. Ví dụ: giao thức và dịch vụ, trạng thái kết nối, thời "
-        "lượng, số gói tin/byte gửi và nhận, tốc độ, tải mạng, độ trễ và số "
-        "kết nối gần đây. Mô hình dùng chúng để dự đoán flow là Normal hay "
-        "Attack; nếu là Attack thì dự đoán thêm nhóm tấn công."
+        "Mô hình xem thông tin tóm tắt của một lượt giao tiếp giữa các thiết bị "
+        "trên mạng: dùng giao thức/dịch vụ nào, kéo dài bao lâu, gửi nhận bao "
+        "nhiêu gói tin và dữ liệu, cùng một số dấu hiệu về nhịp độ kết nối. "
+        "Đó là 29 đặc trưng đầu vào, không phải 29 loại tấn công."
     )
     st.info(
-        "App hiện chưa quét URL hay theo dõi mạng trực tiếp. CSV cần chứa các "
-        "flow đã được chuyển thành feature theo định dạng UNSW-NB15."
+        "Ứng dụng hiện không quét địa chỉ website và không theo dõi mạng trực "
+        "tiếp. Để phân tích dữ liệu của bạn, cần tệp CSV đã được chuẩn bị theo "
+        "định dạng UNSW-NB15."
     )
 
 mode = st.radio(
-    "Bạn muốn bắt đầu thế nào?",
-    ["Chạy thử demo", "Phân tích CSV của tôi"],
+    "Chọn cách bắt đầu",
+    ["Xem bản dùng thử", "Tôi có tệp CSV"],
     horizontal=True,
 )
 
-if mode == "Chạy thử demo":
-    st.subheader("Chạy thử bằng dữ liệu mô phỏng")
+if mode == "Xem bản dùng thử":
+    st.subheader("Xem ví dụ minh họa")
     input_df = make_demo_flows(required_features)
     st.caption(
-        "Hai flow bên dưới được tạo để minh họa thao tác của app; đây không "
-        "phải traffic thật và kết quả không dùng để đánh giá mô hình."
+        "Bạn không cần tải tệp lên. Hai ví dụ này được tạo để minh họa thao tác; "
+        "chúng không phải dữ liệu mạng thật."
     )
-    with st.expander("Xem 2 flow demo", expanded=True):
+    st.dataframe(
+        pd.DataFrame({
+            "Ví dụ": ["Flow minh họa A", "Flow minh họa B"],
+            "Mô tả": [
+                "Một lượt trao đổi dữ liệu qua TCP.",
+                "Một lượt UDP ngắn, được dựng để minh họa dữ liệu đầu vào.",
+            ],
+        }),
+        use_container_width=True,
+        hide_index=True,
+    )
+    with st.expander("Xem các giá trị kỹ thuật trong ví dụ"):
         st.dataframe(input_df, use_container_width=True, hide_index=True)
     st.download_button(
-        "Tải CSV demo",
+        "Tải tệp CSV của ví dụ",
         data=input_df.to_csv(index=False).encode("utf-8-sig"),
         file_name="ids_demo_flows.csv",
         mime="text/csv",
     )
     source_key = "demo-v1"
 else:
-    st.subheader("Phân tích dữ liệu flow của bạn")
+    st.subheader("Phân tích tệp dữ liệu của bạn")
     st.write(
-        "Tải CSV có đủ 29 feature đầu vào. CSV 34 cột gốc của UNSW-NB15 "
-        "cũng được chấp nhận; 5 feature đã loại sẽ được bỏ qua."
+        "Chọn tệp CSV chứa các lượt kết nối mạng đã chuyển thành bảng. Tệp cần "
+        "đủ 29 cột đặc trưng của mô hình; tệp 34 cột gốc của UNSW-NB15 cũng "
+        "được chấp nhận."
     )
-    uploaded_file = st.file_uploader("Chọn file CSV", type=["csv"])
+    uploaded_file = st.file_uploader("Chọn tệp CSV", type=["csv"])
     if uploaded_file is None:
         st.info(
-            "Chưa có CSV? Chọn **Chạy thử demo** để xem app hoạt động, hoặc "
-            "chuẩn bị một CSV flow theo định dạng UNSW-NB15."
+            "Chưa có tệp phù hợp? Chọn **Xem bản dùng thử** để làm quen với ứng dụng."
         )
         st.stop()
 
@@ -190,11 +200,11 @@ if missing_features:
     st.stop()
 
 st.caption(f"{len(input_df):,} dòng · {len(input_df.columns)} cột trong file")
-if mode != "Chạy thử demo":
+if mode != "Xem bản dùng thử":
     with st.expander("Xem trước dữ liệu", expanded=False):
         st.dataframe(input_df.head(20), use_container_width=True)
 
-button_label = "Chạy dự đoán demo" if mode == "Chạy thử demo" else "Phân tích CSV"
+button_label = "Phân tích ví dụ" if mode == "Xem bản dùng thử" else "Phân tích tệp"
 if st.button(button_label, type="primary", use_container_width=True):
     work_df = input_df.copy()
     numeric = work_df.loc[:, numeric_features].apply(pd.to_numeric, errors="coerce")
@@ -237,16 +247,54 @@ if results is not None and st.session_state.get("source_key") == source_key:
     normal_count = int(counts.get("Normal", 0))
     attack_count = int(counts.get("Attack", 0))
     col1, col2, col3 = st.columns(3)
-    col1.metric("Flows đã phân tích", f"{len(results):,}")
-    col2.metric("Cảnh báo Attack", f"{attack_count:,}")
-    col3.metric("Dự đoán Normal", f"{normal_count:,}")
+    col1.metric("Số lượt kết nối đã xem", f"{len(results):,}")
+    col2.metric("Được đánh dấu cần kiểm tra", f"{attack_count:,}")
+    col3.metric("Chưa bị đánh dấu", f"{normal_count:,}")
 
-    st.bar_chart(counts.rename_axis("prediction"))
-    st.dataframe(results, use_container_width=True, hide_index=True)
+    st.warning(
+        "“Cần kiểm tra” nghĩa là mô hình thấy điểm giống dữ liệu tấn công đã "
+        "học. Đây chưa phải bằng chứng có tấn công. “Chưa bị đánh dấu” cũng "
+        "không đảm bảo kết nối an toàn."
+    )
+    display_results = results[
+        ["prediction", "attack_type", "attack_probability"]
+    ].copy()
+    display_results["prediction"] = display_results["prediction"].map(
+        {"Attack": "Cần kiểm tra", "Normal": "Chưa bị đánh dấu"}
+    )
+    attack_type_names = {
+        "Analysis": "Analysis · phân tích",
+        "Backdoor": "Backdoor · cửa hậu",
+        "DoS": "DoS · làm gián đoạn dịch vụ",
+        "Exploits": "Exploits · khai thác lỗ hổng",
+        "Fuzzers": "Fuzzers · thử dữ liệu bất thường",
+        "Generic": "Generic · nhóm tổng quát",
+        "Reconnaissance": "Reconnaissance · do thám",
+        "Shellcode": "Shellcode · mã khai thác",
+        "Worms": "Worms · sâu máy tính",
+    }
+    display_results["attack_type"] = display_results["attack_type"].map(
+        lambda value: attack_type_names.get(value, value)
+    )
+    display_results["attack_probability"] = display_results[
+        "attack_probability"
+    ].map(lambda value: "—" if pd.isna(value) else f"{value:.0%}")
+    display_results = display_results.rename(columns={
+        "prediction": "Nhận định của mô hình",
+        "attack_type": "Nhóm được dự đoán",
+        "attack_probability": "Điểm mô hình (%)",
+    })
+    st.dataframe(display_results, use_container_width=True, hide_index=True)
+    st.caption(
+        "Điểm mô hình chưa được hiệu chuẩn; không nên hiểu đây là phần trăm "
+        "chắc chắn đúng. Nhóm tấn công là tên nhóm trong bộ dữ liệu nghiên cứu."
+    )
+    with st.expander("Xem toàn bộ dữ liệu và chi tiết kỹ thuật"):
+        st.dataframe(results, use_container_width=True, hide_index=True)
 
     csv_bytes = results.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
-        "Tải kết quả CSV",
+        "Tải kết quả đầy đủ dưới dạng CSV",
         data=csv_bytes,
         file_name="ids_predictions.csv",
         mime="text/csv",
@@ -254,7 +302,7 @@ if results is not None and st.session_state.get("source_key") == source_key:
     )
 
     st.caption(
-        "Một flow có thể được cảnh báo là Attack nhưng phân loại sai attack_type. "
-        "Các chỉ số confidence chưa được hiệu chuẩn; không xem chúng là bảo đảm "
-        "model đúng."
+        "Kết quả này là gợi ý từ mô hình nghiên cứu, có thể sai hoặc bỏ sót. "
+        "Hãy nhờ người có chuyên môn kiểm tra trước khi đưa ra quyết định. "
+        "Các nhóm tấn công hiếm có thể khó nhận diện hơn."
     )
