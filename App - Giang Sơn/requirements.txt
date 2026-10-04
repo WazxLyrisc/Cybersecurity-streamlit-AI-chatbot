@@ -1,7 +1,4 @@
-streamlit==1.65.0
 joblib
-pandas
-numpy
 scikit-learn
-xgboost
-google-genai
+numpy
+pandas
