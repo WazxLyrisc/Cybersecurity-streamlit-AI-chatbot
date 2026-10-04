@@ -225,9 +225,9 @@ if st.button(button_label, type="primary", use_container_width=True):
         results = input_df.copy()
         for column in predictions.columns:
             results[column] = predictions[column].to_numpy()
-    st.session_state["prediction_result"] = results
+        st.session_state["prediction_result"] = results
     except Exception as exc:
-        st.error("Không thể dự đoán từ CSV này.")
+        st.error("Không thể chạy dự đoán cho dữ liệu này.")
         st.exception(exc)
 
 results = st.session_state.get("prediction_result")
