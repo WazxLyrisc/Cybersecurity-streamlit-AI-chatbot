@@ -95,6 +95,100 @@ st.set_page_config(
     layout="wide",
 )
 
+# ==============================================================================
+# Giao diện "SOC console": font + CSS tùy chỉnh. Màu theme nền/chữ chính nằm ở
+# .streamlit/config.toml — khối này chỉ bổ sung những gì config.toml không làm
+# được (font chữ ngoài, style card cho st.metric, badge rủi ro, khung chat).
+# ==============================================================================
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+    /* Tiêu đề chính đậm hơn, đúng tinh thần "console" */
+    h1, h2, h3 { font-weight: 700; letter-spacing: -0.01em; }
+
+    /* 3 st.metric đầu kết quả -> dạng card có viền, số liệu dùng font monospace
+       cho cảm giác "terminal" và dễ đọc số */
+    div[data-testid="stMetric"] {
+        background-color: #141A21;
+        border: 1px solid #263140;
+        border-radius: 10px;
+        padding: 14px 16px;
+    }
+    div[data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+    }
+
+    /* Khung chat: viền riêng để tách bạch rõ với bảng kết quả phía trên */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 12px;
+    }
+
+    /* Badge mức độ rủi ro — 3 mức, nền đặc + chữ tối màu để luôn đạt tương phản
+       AA bất kể theme sáng/tối, không chỉ dựa vào màu (có icon + chữ kèm theo) */
+    .risk-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        font-size: 0.85rem;
+    }
+    .risk-badge.low    { background-color: #86EFAC; color: #052e16; }
+    .risk-badge.medium { background-color: #FDE68A; color: #451a03; }
+    .risk-badge.high   { background-color: #FCA5A5; color: #450a0a; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def risk_tier(attack_probability: float) -> tuple[str, str, str]:
+    """3 mức rủi ro dùng chung cho cả bảng kết quả và badge trong khung chat."""
+    if attack_probability < 0.3:
+        return "low", "✅", "THẤP"
+    if attack_probability < 0.7:
+        return "medium", "⚠️", "TRUNG BÌNH"
+    return "high", "🚨", "CAO"
+
+
+def risk_badge_html(attack_probability: float) -> str:
+    level, icon, label = risk_tier(attack_probability)
+    label_full = {"low": "RỦI RO THẤP", "medium": "RỦI RO TRUNG BÌNH", "high": "RỦI RO CAO"}[level]
+    return f'<span class="risk-badge {level}">{icon} {label_full} · {attack_probability:.0%}</span>'
+
+
+def risk_badge_text(attack_probability: float) -> str:
+    """Phiên bản văn bản thuần (icon + chữ + %) để dùng trong st.dataframe,
+    nơi không render được HTML tuỳ ý."""
+    _, icon, label = risk_tier(attack_probability)
+    return f"{attack_probability:.0%} · {icon} {label}"
+
+
+RISK_BG = {"low": "#86EFAC", "medium": "#FDE68A", "high": "#FCA5A5"}
+RISK_FG = {"low": "#052e16", "medium": "#451a03", "high": "#450a0a"}
+
+
+def style_risk_column(styler, column: str, probabilities: pd.Series):
+    """Tô màu nền cho đúng 1 cột 'Điểm mô hình' trong bảng kết quả, theo 3 mức
+    rủi ro — màu chỉ là lớp bổ sung, chữ + icon ở trên đã truyền đạt đủ ý nghĩa."""
+    def _color(_value, prob):
+        level, _, _ = risk_tier(prob)
+        return f"background-color: {RISK_BG[level]}; color: {RISK_FG[level]}; font-weight: 700;"
+
+    styles = pd.DataFrame("", index=styler.data.index, columns=styler.data.columns)
+    styles[column] = [
+        f"background-color: {RISK_BG[risk_tier(p)[0]]}; color: {RISK_FG[risk_tier(p)[0]]}; font-weight: 700;"
+        for p in probabilities
+    ]
+    return styler.apply(lambda _df: styles, axis=None)
+
 
 @st.cache_resource(show_spinner="Đang nạp model IDS...")
 def get_bundle(path: str, modified_ns: int):
@@ -358,15 +452,19 @@ if results is not None and st.session_state.get("source_key") == source_key:
     display_results["attack_type"] = display_results["attack_type"].map(
         lambda value: attack_type_names.get(value, value)
     )
-    display_results["attack_probability"] = display_results[
-        "attack_probability"
-    ].map(lambda value: "—" if pd.isna(value) else f"{value:.0%}")
+    risk_probabilities = results["attack_probability"]
+    display_results["attack_probability"] = risk_probabilities.map(
+        lambda value: "—" if pd.isna(value) else risk_badge_text(value)
+    )
     display_results = display_results.rename(columns={
         "prediction": "Nhận định của mô hình",
         "attack_type": "Nhóm được dự đoán",
-        "attack_probability": "Điểm mô hình (%)",
+        "attack_probability": "Điểm mô hình & mức rủi ro",
     })
-    st.dataframe(display_results, use_container_width=True, hide_index=True)
+    styled_results = style_risk_column(
+        display_results.style, "Điểm mô hình & mức rủi ro", risk_probabilities
+    )
+    st.dataframe(styled_results, use_container_width=True, hide_index=True)
     st.caption(
         "Điểm mô hình chưa được hiệu chuẩn; không nên hiểu đây là phần trăm "
         "chắc chắn đúng. Nhóm tấn công là tên nhóm trong bộ dữ liệu nghiên cứu."
@@ -393,36 +491,44 @@ if results is not None and st.session_state.get("source_key") == source_key:
     # Trợ lý AI: giải thích và tư vấn cho một dòng kết quả cụ thể
     # ======================================================================
     st.divider()
-    st.subheader("💬 Hỏi trợ lý AI về một kết nối cụ thể")
 
-    def _row_label(pos: int) -> str:
-        row = results.iloc[pos]
-        tag = "Cần kiểm tra" if row["prediction"] == "Attack" else "Chưa bị đánh dấu"
-        extra = f" · {row['attack_type']}" if pd.notna(row.get("attack_type")) else ""
-        return f"Dòng {pos + 1} — {tag}{extra}"
+    chat_box = st.container(border=True)
+    with chat_box:
+        st.subheader("💬 Hỏi trợ lý AI về một kết nối cụ thể")
 
-    # Mặc định chọn sẵn dòng "Cần kiểm tra" đầu tiên (nếu có) để người dùng không
-    # phải tự tìm trong bảng lớn.
-    attack_rows = results.index[results["prediction"] == "Attack"].tolist()
-    default_pos = results.index.get_loc(attack_rows[0]) if attack_rows else 0
+        def _row_label(pos: int) -> str:
+            row = results.iloc[pos]
+            tag = "Cần kiểm tra" if row["prediction"] == "Attack" else "Chưa bị đánh dấu"
+            extra = f" · {row['attack_type']}" if pd.notna(row.get("attack_type")) else ""
+            return f"Dòng {pos + 1} — {tag}{extra}"
 
-    selected_pos = st.selectbox(
-        "Chọn dòng muốn thảo luận",
-        options=list(range(len(results))),
-        index=default_pos,
-        format_func=_row_label,
-        key="chat_row_selector",
-    )
+        # Mặc định chọn sẵn dòng "Cần kiểm tra" đầu tiên (nếu có) để người dùng
+        # không phải tự tìm trong bảng lớn.
+        attack_rows = results.index[results["prediction"] == "Attack"].tolist()
+        default_pos = results.index.get_loc(attack_rows[0]) if attack_rows else 0
 
-    if st.session_state.get("chat_selected_pos") != selected_pos or \
-            st.session_state.get("chat_source_key") != source_key:
-        st.session_state["chat_selected_pos"] = selected_pos
-        st.session_state["chat_source_key"] = source_key
-        st.session_state["chat_history"] = []
+        selected_pos = st.selectbox(
+            "Chọn dòng muốn thảo luận",
+            options=list(range(len(results))),
+            index=default_pos,
+            format_func=_row_label,
+            key="chat_row_selector",
+        )
 
-    for turn in st.session_state.get("chat_history", []):
-        with st.chat_message("user" if turn["role"] == "user" else "assistant"):
-            st.markdown(turn["text"])
+        selected_row = results.iloc[selected_pos]
+        st.markdown(risk_badge_html(selected_row["attack_probability"]), unsafe_allow_html=True)
+        if pd.notna(selected_row.get("attack_type")):
+            st.caption(f"Nhóm được dự đoán: {selected_row['attack_type']}")
+
+        if st.session_state.get("chat_selected_pos") != selected_pos or \
+                st.session_state.get("chat_source_key") != source_key:
+            st.session_state["chat_selected_pos"] = selected_pos
+            st.session_state["chat_source_key"] = source_key
+            st.session_state["chat_history"] = []
+
+        for turn in st.session_state.get("chat_history", []):
+            with st.chat_message("user" if turn["role"] == "user" else "assistant"):
+                st.markdown(turn["text"])
 
     user_msg = st.chat_input("Ví dụ: Vì sao dòng này bị đánh dấu? Nên xử lý thế nào?")
     if user_msg:
