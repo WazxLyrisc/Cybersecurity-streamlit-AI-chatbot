@@ -20,6 +20,75 @@ BUNDLE_PATH = APP_DIR / "unsw_nb15_ids_29feature_bundle.joblib"
 # gặp các nhãn này.
 LOW_RELIABILITY_CLASSES = {"Analysis", "Backdoor", "DoS"}
 
+# Giải thích bằng ngôn ngữ phổ thông cho 9 nhóm tấn công của UNSW-NB15 — dùng cả
+# cho mục tra cứu chung và để "ghim" chatbot vào đúng định nghĩa, tránh việc
+# Gemini tự suy diễn hoặc giải thích sai một thuật ngữ chuyên ngành.
+ATTACK_TYPE_INFO = {
+    "Analysis": {
+        "label": "Analysis · Dò xét ứng dụng web",
+        "what": "Kẻ tấn công rà soát một trang/ứng dụng web để tìm điểm yếu — ví dụ "
+        "thử chèn mã vào ô nhập liệu, hoặc dò các cổng dịch vụ đang mở.",
+        "danger": "Thường là bước thăm dò ban đầu, chưa gây hại trực tiếp nhưng là "
+        "dấu hiệu cảnh báo sớm cần theo dõi.",
+    },
+    "Backdoor": {
+        "label": "Backdoor · Cửa hậu",
+        "what": "Kẻ tấn công cài một lối vào bí mật trên máy/hệ thống, để sau này "
+        "quay lại truy cập mà không cần đăng nhập bình thường.",
+        "danger": "Mức độ cao — nếu đúng là cửa hậu, kẻ tấn công có thể ra vào hệ "
+        "thống bất cứ lúc nào mà quản trị viên không hay biết.",
+    },
+    "DoS": {
+        "label": "DoS · Làm gián đoạn dịch vụ",
+        "what": "Gửi dồn dập yêu cầu/giao tiếp khiến hệ thống quá tải, không còn "
+        "phục vụ được người dùng thật (Denial of Service).",
+        "danger": "Mức độ cao đối với tính sẵn sàng của dịch vụ — người dùng hợp "
+        "lệ không truy cập được trong lúc bị tấn công.",
+    },
+    "Exploits": {
+        "label": "Exploits · Khai thác lỗ hổng",
+        "what": "Kẻ tấn công tận dụng một lỗ hổng bảo mật cụ thể, đã biết trước, "
+        "trong phần mềm hoặc hệ điều hành để chiếm quyền kiểm soát.",
+        "danger": "Mức độ cao — có thể dẫn tới chiếm quyền điều khiển một phần "
+        "hoặc toàn bộ hệ thống.",
+    },
+    "Fuzzers": {
+        "label": "Fuzzers · Thử dữ liệu bất thường",
+        "what": "Gửi dữ liệu ngẫu nhiên hoặc dị dạng vào hệ thống để thử tìm lỗi "
+        "hoặc làm treo chương trình.",
+        "danger": "Thường ở mức thăm dò/thử nghiệm, nhưng có thể là bước mở đầu "
+        "cho một cuộc tấn công nghiêm trọng hơn nếu tìm được lỗ hổng.",
+    },
+    "Generic": {
+        "label": "Generic · Tấn công mã hoá tổng quát",
+        "what": "Một kỹ thuật tấn công tổng quát nhắm vào thuật toán mã hoá, "
+        "không phụ thuộc vào cấu hình cụ thể của hệ thống đang chạy.",
+        "danger": "Mức độ tuỳ ngữ cảnh sử dụng — đây là nhóm có số lượng mẫu lớn "
+        "nhất trong dữ liệu huấn luyện nên mô hình nhận diện khá tốt.",
+    },
+    "Reconnaissance": {
+        "label": "Reconnaissance · Do thám",
+        "what": "Thu thập thông tin về hệ thống — quét cổng, dò tìm dịch vụ đang "
+        "chạy — để chuẩn bị cho một cuộc tấn công sau này.",
+        "danger": "Mức độ thấp trực tiếp, nhưng là tín hiệu cảnh báo có khả năng "
+        "sắp xảy ra tấn công nghiêm trọng hơn.",
+    },
+    "Shellcode": {
+        "label": "Shellcode · Mã khai thác",
+        "what": "Một đoạn mã nhỏ được 'bơm' vào hệ thống ngay sau khi một lỗ hổng "
+        "đã bị khai thác thành công, dùng để chiếm quyền điều khiển.",
+        "danger": "Mức độ cao — thường xuất hiện ngay sau bước Exploits, cho thấy "
+        "cuộc tấn công đã tiến khá xa.",
+    },
+    "Worms": {
+        "label": "Worms · Sâu máy tính",
+        "what": "Phần mềm độc hại tự nhân bản và lây lan sang các máy khác trong "
+        "mạng mà không cần người dùng thao tác gì thêm.",
+        "danger": "Mức độ cao — có khả năng lan rộng nhanh trong toàn bộ mạng nếu "
+        "không được cách ly kịp thời.",
+    },
+}
+
 CHATBOT_SYSTEM_PROMPT = """Ban la chuyen gia phan tich an ninh mang (SOC Analyst) ho tro
 quan tri vien dang xem ket qua tu he thong IDS hai tang (Binary Normal/Attack, sau do
 Multiclass phan loai nhom tan cong) huan luyen tren bo du lieu nghien cuu UNSW-NB15.
@@ -54,6 +123,12 @@ def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
         lines.append(f"- Nhom tan cong du doan (Stage 2): {attack_type}")
         if pd.notna(row.get("attack_confidence")):
             lines.append(f"- Do tin cay vao nhom tan cong (Stage 2): {row['attack_confidence']:.1%}")
+        info = ATTACK_TYPE_INFO.get(attack_type)
+        if info:
+            lines.append(
+                f"- Dinh nghia nhom '{attack_type}' (dung DUNG dinh nghia nay, khong "
+                f"tu suy dien them): {info['what']} Muc do nguy hiem thuong gap: {info['danger']}"
+            )
         if attack_type in LOW_RELIABILITY_CLASSES:
             lines.append(
                 "- CANH BAO NOI BO: day la nhom co do tin cay thap trong danh gia noi bo "
@@ -306,6 +381,21 @@ with st.expander("Mô hình này phân tích gì?", expanded=False):
         "định dạng UNSW-NB15."
     )
 
+with st.expander("📖 9 nhóm tấn công là gì? (dành cho người mới)", expanded=False):
+    st.caption(
+        "Mô hình chỉ xếp một kết nối vào 1 trong 9 nhóm dưới đây (hoặc Normal). "
+        "Tên gọi là thuật ngữ chuyên ngành trong bộ dữ liệu nghiên cứu, không "
+        "phải tên gọi phổ biến hàng ngày — bấm vào từng nhóm để xem giải thích."
+    )
+    for attack_type, info in ATTACK_TYPE_INFO.items():
+        reliability_note = (
+            " ⚠️ *Nhóm này mô hình hay nhận diện nhầm, nên cần xác minh thêm.*"
+            if attack_type in LOW_RELIABILITY_CLASSES else ""
+        )
+        with st.expander(info["label"]):
+            st.markdown(f"**Hoạt động như thế nào:** {info['what']}")
+            st.markdown(f"**Mức độ nguy hiểm:** {info['danger']}{reliability_note}")
+
 mode = st.radio(
     "Chọn cách bắt đầu",
     ["Xem bản dùng thử", "Tôi có tệp CSV"],
@@ -438,19 +528,8 @@ if results is not None and st.session_state.get("source_key") == source_key:
     display_results["prediction"] = display_results["prediction"].map(
         {"Attack": "Cần kiểm tra", "Normal": "Chưa bị đánh dấu"}
     )
-    attack_type_names = {
-        "Analysis": "Analysis · phân tích",
-        "Backdoor": "Backdoor · cửa hậu",
-        "DoS": "DoS · làm gián đoạn dịch vụ",
-        "Exploits": "Exploits · khai thác lỗ hổng",
-        "Fuzzers": "Fuzzers · thử dữ liệu bất thường",
-        "Generic": "Generic · nhóm tổng quát",
-        "Reconnaissance": "Reconnaissance · do thám",
-        "Shellcode": "Shellcode · mã khai thác",
-        "Worms": "Worms · sâu máy tính",
-    }
     display_results["attack_type"] = display_results["attack_type"].map(
-        lambda value: attack_type_names.get(value, value)
+        lambda value: ATTACK_TYPE_INFO.get(value, {}).get("label", value)
     )
     risk_probabilities = results["attack_probability"]
     display_results["attack_probability"] = risk_probabilities.map(
@@ -517,8 +596,13 @@ if results is not None and st.session_state.get("source_key") == source_key:
 
         selected_row = results.iloc[selected_pos]
         st.markdown(risk_badge_html(selected_row["attack_probability"]), unsafe_allow_html=True)
-        if pd.notna(selected_row.get("attack_type")):
-            st.caption(f"Nhóm được dự đoán: {selected_row['attack_type']}")
+        selected_attack_type = selected_row.get("attack_type")
+        if pd.notna(selected_attack_type):
+            info = ATTACK_TYPE_INFO.get(selected_attack_type)
+            if info:
+                st.caption(f"**{info['label']}** — {info['what']}")
+            else:
+                st.caption(f"Nhóm được dự đoán: {selected_attack_type}")
 
         if st.session_state.get("chat_selected_pos") != selected_pos or \
                 st.session_state.get("chat_source_key") != source_key:
