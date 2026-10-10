@@ -139,6 +139,22 @@ def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
     return "\n".join(lines)
 
 
+def get_shared_api_key() -> str:
+    """Key do người triển khai app (dev) cấu hình sẵn — không yêu cầu người xem
+    tự có/tự nhập API key. Ưu tiên Streamlit `secrets.toml` (dùng khi deploy lên
+    Streamlit Community Cloud: Settings → Secrets), sau đó mới tới biến môi
+    trường GEMINI_API_KEY (dùng khi tự host bằng Docker/server riêng)."""
+    try:
+        key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        # st.secrets ném lỗi nếu chưa có file secrets.toml nào cả — bỏ qua, coi
+        # như chưa cấu hình, rồi thử biến môi trường.
+        key = ""
+    if not key:
+        key = os.environ.get("GEMINI_API_KEY", "")
+    return key
+
+
 def call_gemini(api_key: str, context: str, chat_history: list, user_message: str) -> str:
     from google import genai
     from google.genai import types
@@ -351,15 +367,47 @@ required_features = metadata["required_input_features"]
 numeric_features = metadata["binary_numeric_features"]
 categorical_features = metadata["categorical_features"]
 
+SHARED_API_KEY = get_shared_api_key()
+
 with st.sidebar:
     st.header("Trợ lý AI")
-    gemini_api_key = st.text_input(
-        "Gemini API key",
-        value=os.environ.get("GEMINI_API_KEY", ""),
-        type="password",
-        help="Lấy tại https://aistudio.google.com/apikey. Có thể đặt sẵn biến môi "
-        "trường GEMINI_API_KEY thay vì nhập mỗi lần.",
-    )
+
+    if SHARED_API_KEY:
+        # Trường hợp bình thường: người triển khai app đã cấu hình sẵn key dùng
+        # chung, người xem không cần biết "API key" là gì.
+        st.success("Trợ lý AI đã sẵn sàng — không cần cấu hình gì thêm.")
+        with st.expander("Dùng API key riêng của bạn (tuỳ chọn, nâng cao)"):
+            st.caption(
+                "Chỉ cần nếu bạn muốn dùng hạn mức Gemini của riêng mình thay vì "
+                "key dùng chung của app này."
+            )
+            custom_api_key = st.text_input(
+                "Gemini API key của bạn",
+                type="password",
+                help="Lấy miễn phí tại https://aistudio.google.com/apikey",
+            )
+        gemini_api_key = custom_api_key or SHARED_API_KEY
+    else:
+        # App chưa được cấu hình key dùng chung — đây là việc của người triển
+        # khai (đặt trong Secrets của Streamlit Cloud hoặc biến môi trường
+        # GEMINI_API_KEY), không phải việc người xem thông thường phải lo.
+        st.warning(
+            "Trợ lý AI chưa được cấu hình key dùng chung cho app này.",
+            icon="⚠️",
+        )
+        with st.expander("Dành cho người triển khai / nâng cao"):
+            st.caption(
+                "Cách khuyến nghị: thêm `GEMINI_API_KEY = \"...\"` vào "
+                "**Settings → Secrets** trên Streamlit Community Cloud (hoặc biến "
+                "môi trường `GEMINI_API_KEY` khi tự host), rồi reload app — mọi "
+                "người xem sẽ dùng chung key đó, không ai phải tự nhập."
+            )
+            gemini_api_key = st.text_input(
+                "Hoặc nhập tạm một Gemini API key để thử ngay",
+                type="password",
+                help="Lấy tại https://aistudio.google.com/apikey",
+            )
+
     with st.expander("Thông tin kỹ thuật", expanded=False):
         st.write("Dữ liệu huấn luyện: UNSW-NB15")
         st.write("Mô hình dùng 29 đặc trưng của mỗi network flow.")
@@ -617,7 +665,12 @@ if results is not None and st.session_state.get("source_key") == source_key:
     user_msg = st.chat_input("Ví dụ: Vì sao dòng này bị đánh dấu? Nên xử lý thế nào?")
     if user_msg:
         if not gemini_api_key:
-            st.error("Vui lòng nhập Gemini API key ở thanh bên trái.")
+            st.error(
+                "Trợ lý AI hiện chưa khả dụng vì app chưa được cấu hình "
+                "Gemini API key. Vui lòng liên hệ người quản trị/triển khai "
+                "app này để bật tính năng, hoặc mở mục “Dành cho người triển "
+                "khai / nâng cao” ở thanh bên trái nếu đây là app bạn tự host."
+            )
         else:
             with st.chat_message("user"):
                 st.markdown(user_msg)
