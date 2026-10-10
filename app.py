@@ -30,6 +30,21 @@ ATTACK_TYPE_INFO = {
         "thử chèn mã vào ô nhập liệu, hoặc dò các cổng dịch vụ đang mở.",
         "danger": "Thường là bước thăm dò ban đầu, chưa gây hại trực tiếp nhưng là "
         "dấu hiệu cảnh báo sớm cần theo dõi.",
+        "immediate_steps": [
+            "Đối chiếu log web server/WAF quanh thời điểm flow này để xem request "
+            "cụ thể là gì (URL, tham số, payload nghi vấn).",
+            "Kiểm tra IP nguồn: có nằm trong danh sách đã biết/đối tác không, hay "
+            "là IP lạ/đến từ nhiều nơi (dấu hiệu quét tự động).",
+            "Chưa cần chặn ngay nếu chỉ 1-2 lượt đơn lẻ; theo dõi thêm xem có lặp "
+            "lại hoặc tăng tần suất không.",
+        ],
+        "followup_steps": [
+            "Nếu có điểm nhập liệu bị dò, rà soát lại việc kiểm tra/lọc input ở "
+            "ứng dụng web liên quan.",
+            "Cân nhắc thêm rate-limit hoặc CAPTCHA cho các endpoint hay bị dò xét.",
+            "Ghi nhận IP/pattern vào danh sách theo dõi để đối chiếu nếu xuất hiện "
+            "tấn công nghiêm trọng hơn sau đó.",
+        ],
     },
     "Backdoor": {
         "label": "Backdoor · Cửa hậu",
@@ -37,6 +52,22 @@ ATTACK_TYPE_INFO = {
         "quay lại truy cập mà không cần đăng nhập bình thường.",
         "danger": "Mức độ cao — nếu đúng là cửa hậu, kẻ tấn công có thể ra vào hệ "
         "thống bất cứ lúc nào mà quản trị viên không hay biết.",
+        "immediate_steps": [
+            "Xác minh ngay với log gốc/EDR trên máy đích trước khi kết luận — nhóm "
+            "này dễ bị mô hình nhầm lẫn với DoS/Exploits.",
+            "Nếu xác nhận có dấu hiệu bất thường, cô lập tạm thời máy/thiết bị liên "
+            "quan khỏi mạng để ngăn kẻ tấn công quay lại qua lối vào đã cài.",
+            "Kiểm tra các tiến trình lạ, cổng mở bất thường, hoặc tài khoản/khoá "
+            "truy cập mới được tạo gần đây trên máy đó.",
+        ],
+        "followup_steps": [
+            "Rà soát toàn bộ hệ thống tìm thêm dấu hiệu cửa hậu khác (persistence), "
+            "không chỉ dừng ở máy đã phát hiện.",
+            "Đổi mật khẩu/khoá truy cập liên quan, rà soát lại quyền truy cập của "
+            "tài khoản dịch vụ.",
+            "Nếu xác nhận sự cố thật, lập báo cáo và rút kinh nghiệm quy trình vá "
+            "lỗi/giám sát để tránh lặp lại.",
+        ],
     },
     "DoS": {
         "label": "DoS · Làm gián đoạn dịch vụ",
@@ -44,6 +75,21 @@ ATTACK_TYPE_INFO = {
         "phục vụ được người dùng thật (Denial of Service).",
         "danger": "Mức độ cao đối với tính sẵn sàng của dịch vụ — người dùng hợp "
         "lệ không truy cập được trong lúc bị tấn công.",
+        "immediate_steps": [
+            "Kiểm tra tải hệ thống/dịch vụ hiện tại — có đang chậm/quá tải thật "
+            "không, hay chỉ là tín hiệu mô hình.",
+            "Xác định IP/dải IP nguồn gây tải lớn; cân nhắc giới hạn tốc độ "
+            "(rate-limit) hoặc chặn tạm thời nếu tải tăng bất thường.",
+            "Nếu có hạ tầng chống DDoS/CDN, kiểm tra xem đã được kích hoạt đúng "
+            "cách chưa.",
+        ],
+        "followup_steps": [
+            "Xem lại ngưỡng cảnh báo tải hệ thống, bổ sung auto-scaling hoặc "
+            "rate-limit ở tầng hạ tầng nếu chưa có.",
+            "Ghi nhận khung giờ/kiểu lưu lượng của đợt này để nhận diện nhanh hơn "
+            "nếu tái diễn.",
+            "Thông báo cho các bên liên quan nếu dịch vụ từng bị gián đoạn thật.",
+        ],
     },
     "Exploits": {
         "label": "Exploits · Khai thác lỗ hổng",
@@ -51,6 +97,20 @@ ATTACK_TYPE_INFO = {
         "trong phần mềm hoặc hệ điều hành để chiếm quyền kiểm soát.",
         "danger": "Mức độ cao — có thể dẫn tới chiếm quyền điều khiển một phần "
         "hoặc toàn bộ hệ thống.",
+        "immediate_steps": [
+            "Xác định dịch vụ/phần mềm đích (dựa vào service, port trong đặc "
+            "trưng) để tra xem có lỗ hổng đã biết (CVE) tương ứng không.",
+            "Kiểm tra máy đích đã được vá bản cập nhật bảo mật mới nhất chưa.",
+            "Nếu nghi ngờ cao, cô lập tạm thời máy đích để ngăn kẻ tấn công khai "
+            "thác thành công/leo thang thêm.",
+        ],
+        "followup_steps": [
+            "Vá lỗ hổng liên quan càng sớm càng tốt nếu máy đích chưa cập nhật.",
+            "Kiểm tra xem máy đích có dấu hiệu đã bị xâm nhập thành công (file lạ, "
+            "tiến trình lạ) để xử lý tiếp theo hướng Shellcode/Backdoor.",
+            "Bổ sung quy tắc IDS/IPS theo đúng dấu hiệu khai thác này nếu đã xác "
+            "minh là thật.",
+        ],
     },
     "Fuzzers": {
         "label": "Fuzzers · Thử dữ liệu bất thường",
@@ -58,6 +118,20 @@ ATTACK_TYPE_INFO = {
         "hoặc làm treo chương trình.",
         "danger": "Thường ở mức thăm dò/thử nghiệm, nhưng có thể là bước mở đầu "
         "cho một cuộc tấn công nghiêm trọng hơn nếu tìm được lỗ hổng.",
+        "immediate_steps": [
+            "Kiểm tra dịch vụ/ứng dụng đích có bị crash, treo, hoặc log lỗi bất "
+            "thường quanh thời điểm này không.",
+            "Xác định IP nguồn có phải công cụ quét tự động (nhiều request dị "
+            "dạng liên tiếp) hay một lượt đơn lẻ.",
+            "Theo dõi thêm thay vì chặn ngay, trừ khi hệ thống đích đã có dấu hiệu "
+            "bất ổn thật sự.",
+        ],
+        "followup_steps": [
+            "Nếu dịch vụ có lỗi khi nhận dữ liệu dị dạng, báo đội phát triển kiểm "
+            "tra validate input kỹ hơn.",
+            "Cân nhắc đưa dịch vụ hay bị fuzz vào diện kiểm thử bảo mật (pentest) "
+            "định kỳ.",
+        ],
     },
     "Generic": {
         "label": "Generic · Tấn công mã hoá tổng quát",
@@ -65,6 +139,18 @@ ATTACK_TYPE_INFO = {
         "không phụ thuộc vào cấu hình cụ thể của hệ thống đang chạy.",
         "danger": "Mức độ tuỳ ngữ cảnh sử dụng — đây là nhóm có số lượng mẫu lớn "
         "nhất trong dữ liệu huấn luyện nên mô hình nhận diện khá tốt.",
+        "immediate_steps": [
+            "Xác định hệ thống/giao thức mã hoá nào đang bị nhắm tới trong flow "
+            "này (dựa vào service/port).",
+            "Kiểm tra xem đây có phải một phần của bài test/benchmark nội bộ "
+            "(traffic mô phỏng) hay là truy cập thật từ bên ngoài.",
+        ],
+        "followup_steps": [
+            "Đảm bảo các thuật toán/thư viện mã hoá đang dùng là phiên bản còn "
+            "được hỗ trợ, không dùng cipher đã lỗi thời.",
+            "Ghi nhận vào báo cáo định kỳ vì đây là nhóm phổ biến nhất trong dữ "
+            "liệu huấn luyện, ít khi là điều bất ngờ.",
+        ],
     },
     "Reconnaissance": {
         "label": "Reconnaissance · Do thám",
@@ -72,6 +158,19 @@ ATTACK_TYPE_INFO = {
         "chạy — để chuẩn bị cho một cuộc tấn công sau này.",
         "danger": "Mức độ thấp trực tiếp, nhưng là tín hiệu cảnh báo có khả năng "
         "sắp xảy ra tấn công nghiêm trọng hơn.",
+        "immediate_steps": [
+            "Ghi nhận IP nguồn và dải cổng/dịch vụ bị quét để theo dõi tiếp.",
+            "Kiểm tra xem IP này có xuất hiện lại với các nhãn tấn công khác "
+            "(Exploits, DoS...) ngay sau đó không — dấu hiệu đang chuẩn bị tấn "
+            "công thật.",
+            "Không cần phản ứng khẩn cấp, nhưng nên đưa vào danh sách theo dõi "
+            "ưu tiên.",
+        ],
+        "followup_steps": [
+            "Rà soát lại các cổng/dịch vụ đang mở ra ngoài, đóng những cổng không "
+            "cần thiết.",
+            "Cân nhắc chặn hoặc giới hạn IP/dải IP quét lặp lại nhiều lần.",
+        ],
     },
     "Shellcode": {
         "label": "Shellcode · Mã khai thác",
@@ -79,6 +178,20 @@ ATTACK_TYPE_INFO = {
         "đã bị khai thác thành công, dùng để chiếm quyền điều khiển.",
         "danger": "Mức độ cao — thường xuất hiện ngay sau bước Exploits, cho thấy "
         "cuộc tấn công đã tiến khá xa.",
+        "immediate_steps": [
+            "Coi đây là sự cố ưu tiên cao — cô lập ngay máy đích khỏi mạng nếu "
+            "điều kiện cho phép.",
+            "Kiểm tra tiến trình đang chạy, kết nối mạng đi ra (outbound) bất "
+            "thường trên máy đích.",
+            "Đối chiếu với các flow ngay trước đó từ cùng IP nguồn để xem có bước "
+            "Exploits dẫn tới hay không.",
+        ],
+        "followup_steps": [
+            "Nếu xác nhận xâm nhập thật, tiến hành quy trình ứng phó sự cố đầy đủ "
+            "(thu thập bằng chứng, khôi phục từ bản sao lưu sạch).",
+            "Vá lỗ hổng gốc đã bị khai thác để chặn đường quay lại.",
+            "Rà soát các máy khác cùng cấu hình/lỗ hổng để phòng lây lan.",
+        ],
     },
     "Worms": {
         "label": "Worms · Sâu máy tính",
@@ -86,6 +199,20 @@ ATTACK_TYPE_INFO = {
         "mạng mà không cần người dùng thao tác gì thêm.",
         "danger": "Mức độ cao — có khả năng lan rộng nhanh trong toàn bộ mạng nếu "
         "không được cách ly kịp thời.",
+        "immediate_steps": [
+            "Ưu tiên cao nhất: cô lập ngay máy/phân đoạn mạng nghi nhiễm để chặn "
+            "lây lan sang máy khác.",
+            "Kiểm tra các máy khác trong cùng mạng con có dấu hiệu tương tự "
+            "(cùng loại kết nối bất thường) không.",
+            "Tạm ngắt kết nối các dịch vụ chia sẻ file/mạng nội bộ nếu nghi ngờ là "
+            "đường lây lan.",
+        ],
+        "followup_steps": [
+            "Quét diệt mã độc toàn bộ các máy trong phân đoạn mạng liên quan.",
+            "Vá lỗ hổng mà sâu máy tính này lợi dụng để lây lan.",
+            "Rà soát lại phân vùng mạng (network segmentation) để hạn chế lây lan "
+            "nếu sự cố tái diễn.",
+        ],
     },
 }
 
@@ -102,10 +229,36 @@ QUY TAC BAT BUOC:
   PHAI nhac ro rang ket qua nay can duoc con nguoi xac minh ky hon, vi nhom tan cong
   nay thuong bi mo hinh nham lan voi cac nhom khac trong qua trinh danh gia.
 - Vai tro cua ban la GIAI THICH tai sao luong du lieu nay bi gan nhan nhu vay (dua
-  tren cac dac trung bat thuong) va TU VAN cac buoc kiem tra/xu ly tiep theo ở muc
-  do SOC (vi du: doi chieu log goc, kiem tra IP nguon, co nen tam thoi gioi han toc
-  do hay cach ly khong). Ban KHONG phai nguoi ra quyet dinh cuoi cung.
-- Tra loi bang tieng Viet, ngan gon, ro rang, dung gach dau dong khi liet ke."""
+  tren cac dac trung bat thuong), CANH BAO muc do nguy hiem, va TU VAN cac buoc xu ly
+  o muc do SOC. Ban KHONG phai nguoi ra quyet dinh cuoi cung, va KHONG tu dong thuc
+  hien hanh dong nao (chi goi y cho con nguoi lam).
+
+KHI KET QUA LA "Attack", HAY CAU TRUC CAU TRA LOI THANH 3 PHAN RO RANG (dung dung
+tieu de sau, co the dieu chinh noi dung nhung KHONG bo qua phan nao):
+
+**Cảnh báo**
+- Tom tat ngan gon: day la nhom tan cong gi, muc do nguy hiem nhu the nao (dua vao
+  dinh nghia va muc do nguy hiem da cho trong NGU CANH), va vi sao flow nay bi gan
+  nhan nhu vay dua tren cac dac trung bat thuong trong du lieu.
+- Neu la nhom do tin cay thap, PHAI noi ro trong chinh phan Canh bao nay.
+
+**Lời khuyên xử lý ngay**
+- Cac buoc KIEM TRA/XAC MINH va NGAN CHAN TAM THOI nen lam truoc tien, trong vai
+  phut toi vai gio dau. NGU CANH co san mot danh sach "Goi y xu ly ngay" cho dung
+  nhom tan cong nay — dung do lam XUONG SON chinh, co the dien giai ro hon nhung
+  KHONG bia them hanh dong ky thuat cu the ma NGU CANH khong goi y (vi du: ten cong
+  cu, lenh terminal cu the) vi ban khong biet he thong that cua nguoi dung.
+
+**Hướng giải quyết**
+- Cac buoc XU LY TRIET DE / KHAC PHUC LAU DAI sau khi da xac minh, dua tren danh
+  sach "Goi y khac phuc lau dai" trong NGU CANH.
+- Neu nguoi dung hoi them chi tiet ky thuat ma NGU CANH khong co, hay noi ro day la
+  goi y o muc tong quat va can doi chieu voi quy trinh/cong cu that cua don vi ho.
+
+Neu ket qua la "Normal" thi khong can cau truc 3 phan nay — tra loi binh thuong,
+nhung van nhac ket qua co the sai (false negative).
+
+Tra loi bang tieng Viet, ro rang, dung gach dau dong khi liet ke cac buoc."""
 
 
 def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
@@ -129,6 +282,14 @@ def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
                 f"- Dinh nghia nhom '{attack_type}' (dung DUNG dinh nghia nay, khong "
                 f"tu suy dien them): {info['what']} Muc do nguy hiem thuong gap: {info['danger']}"
             )
+            if info.get("immediate_steps"):
+                lines.append("- Goi y xu ly ngay (dung lam xuong son cho phan 'Loi khuyen xu ly ngay'):")
+                for step in info["immediate_steps"]:
+                    lines.append(f"  + {step}")
+            if info.get("followup_steps"):
+                lines.append("- Goi y khac phuc lau dai (dung lam xuong son cho phan 'Huong giai quyet'):")
+                for step in info["followup_steps"]:
+                    lines.append(f"  + {step}")
         if attack_type in LOW_RELIABILITY_CLASSES:
             lines.append(
                 "- CANH BAO NOI BO: day la nhom co do tin cay thap trong danh gia noi bo "
