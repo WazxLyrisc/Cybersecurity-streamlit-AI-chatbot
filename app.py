@@ -334,7 +334,7 @@ def call_gemini(api_key: str, context: str, chat_history: list, user_message: st
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         contents=contents,
         config=types.GenerateContentConfig(system_instruction=CHATBOT_SYSTEM_PROMPT, temperature=0.3),
     )
