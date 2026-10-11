@@ -258,7 +258,50 @@ tieu de sau, co the dieu chinh noi dung nhung KHONG bo qua phan nao):
 Neu ket qua la "Normal" thi khong can cau truc 3 phan nay — tra loi binh thuong,
 nhung van nhac ket qua co the sai (false negative).
 
-Tra loi bang tieng Viet, ro rang, dung gach dau dong khi liet ke cac buoc."""
+Luu y ve ngon ngu: cac tieu de phan ("Cảnh báo" / "Lời khuyên xử lý ngay" / "Hướng
+giải quyết") va NGU CANH duoi day duoc viet san bang tieng Viet, nhung do CHI la
+du lieu noi bo de ban tra cuu — KHONG co nghia ban phai tra loi bang tieng Viet.
+Luon tra loi bang dung ngon ngu duoc chi dinh o cuoi prompt nay (muc "NGON NGU TRA
+LOI"), dich ca 3 tieu de phan sang ngon ngu do, ro rang va dung gach dau dong khi
+liet ke cac buoc."""
+
+# Tên hiển thị + hướng dẫn ngôn ngữ cho Gemini. "auto" để model tự nhận diện ngôn
+# ngữ người dùng đang gõ trong câu hỏi, các mã còn lại ép trả lời cố định một ngôn
+# ngữ (hữu ích khi người xem muốn chatbot luôn trả lời bằng ngôn ngữ họ chọn, bất
+# kể họ gõ câu hỏi bằng ngôn ngữ nào).
+LANGUAGE_OPTIONS = {
+    "auto": "Tự động theo câu hỏi",
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "zh": "中文",
+    "ja": "日本語",
+    "ko": "한국어",
+    "fr": "Français",
+    "es": "Español",
+}
+
+
+def build_language_instruction(language_code: str) -> str:
+    if language_code == "auto" or language_code not in LANGUAGE_OPTIONS:
+        return (
+            "NGON NGU TRA LOI: Tu dong nhan dien ngon ngu nguoi dung dang dung "
+            "trong CAU HOI moi nhat, va tra loi bang DUNG ngon ngu do. Neu cau hoi "
+            "pha tron nhieu ngon ngu, chon ngon ngu xuat hien nhieu nhat. Neu day "
+            "la luot chat dau tien va chua co du du lieu de nhan dien, mac dinh "
+            "dung tieng Viet."
+        )
+    language_name = LANGUAGE_OPTIONS[language_code]
+    return (
+        f"NGON NGU TRA LOI: LUON tra loi bang {language_name}, bat ke nguoi dung "
+        f"go cau hoi bang ngon ngu nao. Chi giu nguyen cac thuat ngu ky thuat/ten "
+        f"rieng khong co ban dich chuan (vi du: ten nhom tan cong goc nhu "
+        f"'Backdoor', 'DoS', 'Exploits', ten cac dac trung du lieu nhu 'sload', "
+        f"'dur'...)."
+    )
+
+
+def build_system_prompt(language_code: str) -> str:
+    return f"{CHATBOT_SYSTEM_PROMPT}\n\n{build_language_instruction(language_code)}"
 
 
 def build_chat_context(row: pd.Series, required_features: list[str]) -> str:
@@ -316,7 +359,13 @@ def get_shared_api_key() -> str:
     return key
 
 
-def call_gemini(api_key: str, context: str, chat_history: list, user_message: str) -> str:
+def call_gemini(
+    api_key: str,
+    context: str,
+    chat_history: list,
+    user_message: str,
+    language_code: str = "auto",
+) -> str:
     from google import genai
     from google.genai import types
 
@@ -334,9 +383,11 @@ def call_gemini(api_key: str, context: str, chat_history: list, user_message: st
     )
 
     response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
+        model="gemini-2.5-flash",
         contents=contents,
-        config=types.GenerateContentConfig(system_instruction=CHATBOT_SYSTEM_PROMPT, temperature=0.3),
+        config=types.GenerateContentConfig(
+            system_instruction=build_system_prompt(language_code), temperature=0.3
+        ),
     )
     return response.text
 
@@ -790,18 +841,30 @@ if results is not None and st.session_state.get("source_key") == source_key:
             extra = f" · {row['attack_type']}" if pd.notna(row.get("attack_type")) else ""
             return f"Dòng {pos + 1} — {tag}{extra}"
 
-        # Mặc định chọn sẵn dòng "Cần kiểm tra" đầu tiên (nếu có) để người dùng
-        # không phải tự tìm trong bảng lớn.
-        attack_rows = results.index[results["prediction"] == "Attack"].tolist()
-        default_pos = results.index.get_loc(attack_rows[0]) if attack_rows else 0
+        row_col, lang_col = st.columns([3, 2])
+        with row_col:
+            # Mặc định chọn sẵn dòng "Cần kiểm tra" đầu tiên (nếu có) để người
+            # dùng không phải tự tìm trong bảng lớn.
+            attack_rows = results.index[results["prediction"] == "Attack"].tolist()
+            default_pos = results.index.get_loc(attack_rows[0]) if attack_rows else 0
 
-        selected_pos = st.selectbox(
-            "Chọn dòng muốn thảo luận",
-            options=list(range(len(results))),
-            index=default_pos,
-            format_func=_row_label,
-            key="chat_row_selector",
-        )
+            selected_pos = st.selectbox(
+                "Chọn dòng muốn thảo luận",
+                options=list(range(len(results))),
+                index=default_pos,
+                format_func=_row_label,
+                key="chat_row_selector",
+            )
+        with lang_col:
+            chat_language = st.selectbox(
+                "Ngôn ngữ trả lời",
+                options=list(LANGUAGE_OPTIONS.keys()),
+                index=0,
+                format_func=lambda code: LANGUAGE_OPTIONS[code],
+                key="chat_language",
+                help="“Tự động theo câu hỏi” để chatbot tự nhận diện bạn đang "
+                "gõ ngôn ngữ nào và trả lời bằng đúng ngôn ngữ đó.",
+            )
 
         selected_row = results.iloc[selected_pos]
         st.markdown(risk_badge_html(selected_row["attack_probability"]), unsafe_allow_html=True)
@@ -823,7 +886,9 @@ if results is not None and st.session_state.get("source_key") == source_key:
             with st.chat_message("user" if turn["role"] == "user" else "assistant"):
                 st.markdown(turn["text"])
 
-    user_msg = st.chat_input("Ví dụ: Vì sao dòng này bị đánh dấu? Nên xử lý thế nào?")
+    user_msg = st.chat_input(
+        "Ví dụ: Vì sao dòng này bị đánh dấu? / Why was this flagged? / 为什么被标记？"
+    )
     if user_msg:
         if not gemini_api_key:
             st.error(
@@ -840,7 +905,11 @@ if results is not None and st.session_state.get("source_key") == source_key:
                 with st.spinner("Đang phân tích..."):
                     try:
                         reply = call_gemini(
-                            gemini_api_key, context, st.session_state["chat_history"], user_msg
+                            gemini_api_key,
+                            context,
+                            st.session_state["chat_history"],
+                            user_msg,
+                            language_code=st.session_state.get("chat_language", "auto"),
                         )
                     except Exception as exc:
                         reply = f"Lỗi khi gọi Gemini API: {exc}"
@@ -849,6 +918,8 @@ if results is not None and st.session_state.get("source_key") == source_key:
             st.session_state["chat_history"].append({"role": "model", "text": reply})
 
     st.caption(
-        "Trợ lý AI chỉ diễn giải dựa trên 29 đặc trưng và kết quả mô hình của dòng "
+        "Bạn có thể gõ câu hỏi bằng bất kỳ ngôn ngữ nào — trợ lý sẽ tự trả lời "
+        "theo đúng ngôn ngữ đó (hoặc theo ngôn ngữ bạn chọn ở trên). Trợ lý AI "
+        "chỉ diễn giải dựa trên 29 đặc trưng và kết quả mô hình của dòng "
         "đang chọn — không tự tra cứu thêm dữ liệu nào khác."
     )
