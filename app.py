@@ -383,7 +383,7 @@ def call_gemini(
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash-lite",
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=build_system_prompt(language_code), temperature=0.3
